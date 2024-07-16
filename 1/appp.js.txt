@@ -1,0 +1,83 @@
+const express = require('express');
+const axios = require('axios');
+
+const app = express();
+const port = 9876;
+
+let windowState = [];
+const windowSize = 10;
+
+const testServerUrls = {
+  prime: 'http://20.244.56.144/test/primes',
+  fibonacci: 'http://20.244.56.144/test/fibo',
+  even: 'http://20.244.56.144/test/even',
+  random: 'http://20.244.56.144/test/rand'
+};
+
+// Replace 'YOUR_ACCESS_TOKEN' with your actual access token
+const accessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eYJNYXBDbG FpbXMiOnsiZXhwIjoxNzIxMTM4MDc5LCJpYXQi0jE3MjExMzc3NzksImlzcyI6IkFm Zm9yZG1lZCIsImp0aSI6IjYxMTkwOTQ3LTRIN2YtNGJjYS04NjBmLTI1ZJU2NzM5M2 E1MiIsInN1YiI6IjIyNTAwMzE5NUBzYXN0cmEuYWMuaW4ifSwiY29tcGFueU5hbwUi OiJnb01hcnQiLCJjbGllbnRJRCI6IjYxMTkwOTQ3LTRIN2YtNGJjYS04NjBmLTI1Zj U2NzM5M2E1MiIsImNsaWVudFNlY3JldCI6Ik1wdGx4YU5JTmFEcHdLUW@iLCJvd251 ck5hbWUiOiJUIEEgVGhhc21haSIsIm93bmVyRW1haWwiOiIyMjUwMDMxOTVAC2FzdH JhLmFjLmluliwicm9sbE5vIjoiMjI1MDAzMTk1In0.Xv4q9Q-NwJ9c8U-9uRuYml8g BUK3seCSfo@vbvf9qPo';
+
+const axiosInstance = axios.create({
+  headers: {
+    'Authorization': Bearer {eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eYJNYXBDbG FpbXMiOnsiZXhwIjoxNzIxMTM4MDc5LCJpYXQi0jE3MjExMzc3NzksImlzcyI6IkFm Zm9yZG1lZCIsImp0aSI6IjYxMTkwOTQ3LTRIN2YtNGJjYS04NjBmLTI1ZJU2NzM5M2 E1MiIsInN1YiI6IjIyNTAwMzE5NUBzYXN0cmEuYWMuaW4ifSwiY29tcGFueU5hbwUi OiJnb01hcnQiLCJjbGllbnRJRCI6IjYxMTkwOTQ3LTRIN2YtNGJjYS04NjBmLTI1Zj U2NzM5M2E1MiIsImNsaWVudFNlY3JldCI6Ik1wdGx4YU5JTmFEcHdLUW@iLCJvd251 ck5hbWUiOiJUIEEgVGhhc21haSIsIm93bmVyRW1haWwiOiIyMjUwMDMxOTVAC2FzdH JhLmFjLmluliwicm9sbE5vIjoiMjI1MDAzMTk1In0.Xv4q9Q-NwJ9c8U-9uRuYml8g BUK3seCSfo@vbvf9qPo}
+  }
+});
+
+// Middleware to handle unauthorized errors and retry once
+axiosInstance.interceptors.response.use(
+  response => response,
+  async error => {
+    const originalRequest = error.config;
+    if (error.response.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      try {
+        const response = await axiosInstance(originalRequest);
+        return response;
+      } catch (error) {
+        throw error;
+      }
+    }
+    throw error;
+  }
+);
+
+app.get('/numbers/:numberid', async (req, res) => {
+  const numberId = req.params.numberid;
+  const testServerUrl = testServerUrls[numberId];
+  
+  if (!testServerUrl) {
+    return res.status(400).json({ error: 'Invalid number ID' });
+  }
+  
+  try {
+    const response = await axiosInstance.get(testServerUrl);
+    const numbers = response.data.numbers;
+    
+    if (!numbers || numbers.length === 0) {
+      return res.status(500).json({ error: 'No numbers received from test server' });
+    }
+    
+    const windowPrevState = [...windowState];
+    
+    // Append new numbers and maintain window size
+    windowState = [...new Set([...windowState, ...numbers])].slice(-windowSize);
+    
+    const avg = windowState.reduce((acc, num) => acc + num, 0) / windowState.length;
+    
+    res.json({
+      numbers,
+      windowPrevState,
+      windowCurrState: windowState,
+      avg
+    });
+  } catch (error) {
+    if (error.response && error.response.status === 401) {
+      return res.status(401).json({ error: 'Unauthorized. Please check your access token.' });
+    }
+    res.status(500).json({ error: 'Error fetching data from test server' });
+  }
+});
+
+app.listen(port, () => {
+  console.log(Average Calculator Microservice running on http://localhost:${port});
+});
